@@ -1,0 +1,7 @@
+build/
+*.nsys-rep
+*.ncu-rep
+__pycache__/
+.vscode/
+.venv/
+.deps/
