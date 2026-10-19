@@ -1,12 +1,18 @@
 # Activates the project-local toolchain for the current PowerShell session only.
 # Usage:  . .\scripts\env.ps1
 $root = Split-Path -Parent $PSScriptRoot
-$deps = Join-Path $root ".deps"
+# CVK_DEPS lets a CI runner point at a pre-provisioned toolchain folder.
+$deps = if ($env:CVK_DEPS) { $env:CVK_DEPS } else { Join-Path $root ".deps" }
 
 $msvc = Get-ChildItem (Join-Path $deps "msvc\VC\Tools\MSVC") | Select-Object -First 1
 $kit  = Join-Path $deps "msvc\sdkroot\Windows Kits\10"
 $sdkv = (Get-ChildItem (Join-Path $kit "Include") | Select-Object -First 1).Name
 $cuda = Join-Path $deps "cuda\Library"
+
+# Nsight Compute is a system install (not available via pip/conda on Windows); optional.
+$ncu = Get-ChildItem "C:\Program Files\NVIDIA Corporation\Nsight Compute*\target\windows-desktop-*-x64" -Directory -ErrorAction SilentlyContinue |
+    Sort-Object FullName | Select-Object -Last 1
+if ($ncu) { $env:PATH = "$($ncu.FullName);$env:PATH" }
 
 $env:CUDA_PATH   = $cuda
 $env:VSLANG      = "1033"   # nvcc parses cl's banner; localized output breaks host-compiler detection
