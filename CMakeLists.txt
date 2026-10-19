@@ -3,11 +3,14 @@ project(cuda_vision_pipeline LANGUAGES CXX CUDA)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
-# RTX 3050 Ti Laptop = compute capability 8.6
-set(CMAKE_CUDA_ARCHITECTURES 86)
+# Default: RTX 3050 Ti Laptop = compute capability 8.6. Override with -DCMAKE_CUDA_ARCHITECTURES=...
+if(NOT DEFINED CMAKE_CUDA_ARCHITECTURES)
+  set(CMAKE_CUDA_ARCHITECTURES 86)
+endif()
+enable_testing()
 
 find_package(CUDAToolkit REQUIRED)
-find_package(OpenCV REQUIRED)
+find_package(OpenCV REQUIRED COMPONENTS core imgproc)
 
 add_library(cvk
   src/kernels/grayscale.cu
@@ -22,3 +25,4 @@ target_link_libraries(bench_grayscale PRIVATE cvk)
 
 add_executable(test_grayscale tests/test_grayscale.cpp)
 target_link_libraries(test_grayscale PRIVATE cvk ${OpenCV_LIBS})
+add_test(NAME grayscale COMMAND test_grayscale)

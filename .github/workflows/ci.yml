@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Hosted runners have no GPU, so this job proves the code compiles and links
+  # (CUDA 12.9 + OpenCV) but cannot run the tests.
+  build:
+    runs-on: ubuntu-24.04
+    container: nvidia/cuda:12.9.1-devel-ubuntu24.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git cmake ninja-build g++ libopencv-dev
+
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build
+
+  # Runs the correctness tests and the benchmark on a real GPU. Needs a self-hosted
+  # Windows runner labelled "gpu" with the toolchain in the folder named by the
+  # CVK_DEPS runner environment variable (same layout as .deps, see scripts/env.ps1).
+  # Skipped unless the repository variable HAS_GPU_RUNNER is "true", or run manually.
+  gpu-test:
+    if: ${{ github.event_name == 'workflow_dispatch' || vars.HAS_GPU_RUNNER == 'true' }}
+    runs-on: [self-hosted, windows, gpu]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure and build
+        shell: pwsh
+        run: |
+          . .\scripts\env.ps1
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release `
+            "-DOpenCV_DIR=$env:CVK_DEPS\opencv\x64\vc17\lib" `
+            "-DCMAKE_CUDA_COMPILER=$env:CUDA_PATH\bin\nvcc.exe" "-DCUDAToolkit_ROOT=$env:CUDA_PATH"
+          cmake --build build
+
+      - name: Test
+        shell: pwsh
+        run: |
+          . .\scripts\env.ps1
+          ctest --test-dir build --output-on-failure
+
+      - name: Benchmark
+        shell: pwsh
+        run: |
+          . .\scripts\env.ps1
+          .\build\bench_grayscale.exe --csv results\ci_grayscale.csv
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: results/ci_grayscale.csv

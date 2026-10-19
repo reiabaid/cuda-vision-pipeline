@@ -1,0 +1,55 @@
+name: Release
+
+# Push a tag like v0.1.0 to publish a GitHub release containing the kernel
+# library (libcvk.a) and its public header, built for sm_75/80/86/89.
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  package:
+    runs-on: ubuntu-24.04
+    container: nvidia/cuda:12.9.1-devel-ubuntu24.04
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends git cmake ninja-build g++ libopencv-dev
+
+      - uses: actions/checkout@v4
+
+      - name: Build
+        run: |
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            "-DCMAKE_CUDA_ARCHITECTURES=75;80;86;89"
+          cmake --build build --target cvk
+
+      - name: Package
+        run: |
+          mkdir -p dist/cvk/lib dist/cvk/include
+          cp build/libcvk.a dist/cvk/lib/
+          cp include/cvk.h dist/cvk/include/
+          tar -czf "cvk-${GITHUB_REF_NAME}-linux-x86_64.tar.gz" -C dist cvk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: package
+          path: cvk-*.tar.gz
+
+  publish:
+    needs: package
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: package
+
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" cvk-*.tar.gz --repo "$GITHUB_REPOSITORY" --generate-notes
