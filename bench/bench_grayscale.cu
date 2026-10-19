@@ -1,4 +1,4 @@
-// Times the grayscale kernel across image sizes and reports achieved bandwidth.
+// Times the grayscale kernels across image sizes and reports achieved bandwidth.
 // Usage: bench_grayscale [--warm] [--csv <path>]
 //   default: cold L2 before every iteration (DRAM-bound numbers)
 //   --warm : no flush (shows L2 effects on small images)
@@ -13,6 +13,13 @@
 
 struct Size {
   int w, h;
+};
+
+using GrayFn = void (*)(const unsigned char*, unsigned char*, int, int, cudaStream_t);
+
+struct Variant {
+  const char* name;
+  GrayFn fn;
 };
 
 int main(int argc, char** argv) {
@@ -31,6 +38,7 @@ int main(int argc, char** argv) {
 
   const std::vector<Size> sizes = {{256, 256},   {512, 512},   {1024, 1024},
                                    {1920, 1080}, {3840, 2160}, {7680, 4320}};
+  const std::vector<Variant> variants = {{"naive", grayscale_gpu}, {"vec4", grayscale_gpu_vec4}};
 
   bench::L2Flusher flusher(dev.l2_bytes);
   bench::Config cfg;
@@ -39,34 +47,40 @@ int main(int argc, char** argv) {
   std::filesystem::path out(csv_path);
   if (out.has_parent_path()) std::filesystem::create_directories(out.parent_path());
   std::ofstream csv(out);
-  csv << "device,cache,width,height,bytes,median_ms,min_ms,p95_ms,gbps,pct_peak\n";
+  csv << "device,cache,kernel,width,height,bytes,median_ms,min_ms,p95_ms,gbps,pct_peak,speedup\n";
 
-  std::printf("%11s %10s %10s %10s %10s %10s\n", "size", "median ms", "min ms", "p95 ms",
-              "GB/s", "% peak");
+  std::printf("%11s %7s %10s %10s %10s %10s %10s %8s\n", "size", "kernel", "median ms", "min ms",
+              "p95 ms", "GB/s", "% peak", "speedup");
 
   for (const Size& s : sizes) {
     const size_t pixels = static_cast<size_t>(s.w) * s.h;
     unsigned char *d_bgr = nullptr, *d_gray = nullptr;
     CUDA_CHECK(cudaMalloc(&d_bgr, pixels * 3));
     CUDA_CHECK(cudaMalloc(&d_gray, pixels));
-    // Pixel values do not affect this kernel's speed; just avoid reading uninitialized memory.
+    // Pixel values do not affect these kernels' speed; just avoid reading uninitialized memory.
     CUDA_CHECK(cudaMemset(d_bgr, 0x7f, pixels * 3));
-
-    const bench::Stats st =
-        bench::time_ms([&] { grayscale_gpu(d_bgr, d_gray, s.w, s.h, cfg.stream); }, cfg);
 
     // 3 B read + 1 B written per pixel.
     const double bytes = static_cast<double>(pixels) * 4.0;
-    const double gbps = bytes / (st.median_ms * 1e-3) / 1e9;
-    const double pct = 100.0 * gbps / dev.peak_gbps;
+    double baseline_ms = 0.0;
 
-    char label[32];
-    std::snprintf(label, sizeof label, "%dx%d", s.w, s.h);
-    std::printf("%11s %10.4f %10.4f %10.4f %10.1f %9.1f%%\n", label, st.median_ms, st.min_ms,
-                st.p95_ms, gbps, pct);
-    csv << '"' << dev.name << "\"," << (warm ? "warm" : "cold") << ',' << s.w << ',' << s.h
-        << ',' << static_cast<long long>(bytes) << ',' << st.median_ms << ',' << st.min_ms << ','
-        << st.p95_ms << ',' << gbps << ',' << pct << '\n';
+    for (const Variant& v : variants) {
+      const bench::Stats st =
+          bench::time_ms([&] { v.fn(d_bgr, d_gray, s.w, s.h, cfg.stream); }, cfg);
+      if (baseline_ms == 0.0) baseline_ms = st.median_ms;
+
+      const double gbps = bytes / (st.median_ms * 1e-3) / 1e9;
+      const double pct = 100.0 * gbps / dev.peak_gbps;
+      const double speedup = baseline_ms / st.median_ms;
+
+      char label[32];
+      std::snprintf(label, sizeof label, "%dx%d", s.w, s.h);
+      std::printf("%11s %7s %10.4f %10.4f %10.4f %10.1f %9.1f%% %7.2fx\n", label, v.name,
+                  st.median_ms, st.min_ms, st.p95_ms, gbps, pct, speedup);
+      csv << '"' << dev.name << "\"," << (warm ? "warm" : "cold") << ',' << v.name << ',' << s.w
+          << ',' << s.h << ',' << static_cast<long long>(bytes) << ',' << st.median_ms << ','
+          << st.min_ms << ',' << st.p95_ms << ',' << gbps << ',' << pct << ',' << speedup << '\n';
+    }
 
     CUDA_CHECK(cudaFree(d_bgr));
     CUDA_CHECK(cudaFree(d_gray));
