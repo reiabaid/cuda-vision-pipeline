@@ -31,21 +31,46 @@ inline DeviceInfo query_device(int dev = 0) {
   return {prop.name, peak, static_cast<size_t>(l2)};
 }
 
-// Writes twice the L2 size so the next kernel starts with a cold cache and its
+// Reads one buffer to evict whatever is in L2. The sum is written only if it hits
+// an impossible value, which keeps the compiler from deleting the loads.
+__global__ void read_flush_kernel(const uint4* __restrict__ buf, size_t n, unsigned* sink) {
+  const size_t stride = static_cast<size_t>(gridDim.x) * blockDim.x;
+  unsigned acc = 0;
+  for (size_t i = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x; i < n; i += stride) {
+    const uint4 v = buf[i];
+    acc += v.x ^ v.y ^ v.z ^ v.w;
+  }
+  if (acc == 0x9E3779B9u) *sink = acc;
+}
+
+// Reads twice the L2 size so the next kernel starts with a cold cache and its
 // reads must come from DRAM, not from data left by the previous iteration.
+// Reading (not writing) matters: a write-based flush leaves dirty lines that must be
+// written back to DRAM while the timed kernel runs, inflating its time.
 class L2Flusher {
  public:
   explicit L2Flusher(size_t l2_bytes) : bytes_(2 * l2_bytes) {
     CUDA_CHECK(cudaMalloc(&buf_, bytes_));
+    CUDA_CHECK(cudaMalloc(&sink_, sizeof(unsigned)));
+    CUDA_CHECK(cudaMemset(buf_, 0xA5, bytes_));
+    CUDA_CHECK(cudaDeviceSynchronize());
   }
-  ~L2Flusher() { cudaFree(buf_); }
+  ~L2Flusher() {
+    cudaFree(buf_);
+    cudaFree(sink_);
+  }
   L2Flusher(const L2Flusher&) = delete;
   L2Flusher& operator=(const L2Flusher&) = delete;
 
-  void flush(cudaStream_t stream) { CUDA_CHECK(cudaMemsetAsync(buf_, 0, bytes_, stream)); }
+  void flush(cudaStream_t stream) {
+    read_flush_kernel<<<256, 256, 0, stream>>>(static_cast<const uint4*>(buf_),
+                                               bytes_ / sizeof(uint4), sink_);
+    CUDA_CHECK(cudaGetLastError());
+  }
 
  private:
   void* buf_ = nullptr;
+  unsigned* sink_ = nullptr;
   size_t bytes_;
 };
 
