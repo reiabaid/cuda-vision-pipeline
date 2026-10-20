@@ -1,37 +1,15 @@
 #include <opencv2/core.hpp>
 #include <opencv2/imgproc.hpp>
 
-#include <functional>
-
 #include "cvk.h"
+#include "test_util.h"
 
 namespace {
 
-using GrayFn = std::function<void(const unsigned char*, unsigned char*, int, int)>;
-
-cv::Mat run_on_gpu(const GrayFn& fn, const cv::Mat& bgr, size_t in_offset = 0) {
-  const int W = bgr.cols, H = bgr.rows;
-  const size_t in_bytes = static_cast<size_t>(W) * H * 3;
-  unsigned char *d_in, *d_out;
-  CUDA_CHECK(cudaMalloc(&d_in, in_bytes + in_offset));
-  CUDA_CHECK(cudaMalloc(&d_out, static_cast<size_t>(W) * H));
-  CUDA_CHECK(cudaMemcpy(d_in + in_offset, bgr.data, in_bytes, cudaMemcpyHostToDevice));
-  fn(d_in + in_offset, d_out, W, H);
-  CUDA_CHECK(cudaDeviceSynchronize());
-  cv::Mat out(H, W, CV_8UC1);
-  CUDA_CHECK(cudaMemcpy(out.data, d_out, static_cast<size_t>(W) * H, cudaMemcpyDeviceToHost));
-  cudaFree(d_in);
-  cudaFree(d_out);
-  return out;
-}
-
-double max_abs_diff(const cv::Mat& a, const cv::Mat& b) {
-  cv::Mat diff;
-  cv::absdiff(a, b, diff);
-  double m;
-  cv::minMaxLoc(diff, nullptr, &m);
-  return m;
-}
+using testutil::GpuFn;
+using testutil::max_abs_diff;
+using testutil::run_on_gpu;
+using GrayFn = GpuFn;
 
 int check(int W, int H, size_t in_offset = 0) {
   cv::Mat bgr(H, W, CV_8UC3);
@@ -41,8 +19,8 @@ int check(int W, int H, size_t in_offset = 0) {
 
   const GrayFn naive = [](auto... a) { grayscale_gpu(a...); };
   const GrayFn vec4 = [](auto... a) { grayscale_gpu_vec4(a...); };
-  const cv::Mat out_naive = run_on_gpu(naive, bgr, in_offset);
-  const cv::Mat out_vec4 = run_on_gpu(vec4, bgr, in_offset);
+  const cv::Mat out_naive = run_on_gpu(naive, bgr, 1, in_offset);
+  const cv::Mat out_vec4 = run_on_gpu(vec4, bgr, 1, in_offset);
 
   // A misaligned input shifts which bytes the kernels see, so only the two kernels
   // can be compared with each other there, not with OpenCV.

@@ -23,3 +23,10 @@ void grayscale_gpu(const unsigned char* d_bgr, unsigned char* d_gray,
 // kernel if either pointer is not 4-byte aligned.
 void grayscale_gpu_vec4(const unsigned char* d_bgr, unsigned char* d_gray,
                         int width, int height, cudaStream_t stream = 0);
+
+// 5x5 Gaussian blur (sigma 1) of a single-channel 8-bit image, reflect-101 borders.
+// Bit-exact with cv::GaussianBlur(src, dst, Size(5,5), 1.0, 1.0, BORDER_REFLECT_101)
+// as of OpenCV 4.14. Rows must be tightly packed. src and dst must not alias.
+// Naive baseline: one thread per pixel, 25 global loads each.
+void gaussian_blur5_naive(const unsigned char* d_src, unsigned char* d_dst,
+                          int width, int height, cudaStream_t stream = 0);

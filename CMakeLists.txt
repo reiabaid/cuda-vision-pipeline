@@ -17,6 +17,7 @@ find_package(OpenCV REQUIRED COMPONENTS core imgproc)
 
 add_library(cvk
   src/kernels/grayscale.cu
+  src/kernels/blur.cu
 )
 target_include_directories(cvk PUBLIC include)
 target_link_libraries(cvk PUBLIC CUDA::cudart)
@@ -28,4 +29,10 @@ target_link_libraries(bench_grayscale PRIVATE cvk)
 
 add_executable(test_grayscale tests/test_grayscale.cpp)
 target_link_libraries(test_grayscale PRIVATE cvk ${OpenCV_LIBS})
+target_include_directories(test_grayscale PRIVATE tests)
 add_test(NAME grayscale COMMAND test_grayscale)
+
+add_executable(test_blur tests/test_blur.cpp)
+target_include_directories(test_blur PRIVATE tests)
+target_link_libraries(test_blur PRIVATE cvk ${OpenCV_LIBS})
+add_test(NAME blur COMMAND test_blur)
