@@ -24,7 +24,7 @@ __global__ void grayscale_kernel(const unsigned char* __restrict__ bgr,
   int x = blockIdx.x * blockDim.x + threadIdx.x;
   int y = blockIdx.y * blockDim.y + threadIdx.y;
   if (x >= width || y >= height) return;
-  int i = y * width + x;
+  const size_t i = static_cast<size_t>(y) * width + x;  // size_t: 3*i overflows int past ~715M px
   gray[i] = to_gray(bgr[3 * i], bgr[3 * i + 1], bgr[3 * i + 2]);
 }
 
@@ -59,6 +59,7 @@ __global__ void grayscale_tail_kernel(const unsigned char* __restrict__ bgr,
 
 void grayscale_gpu(const unsigned char* d_bgr, unsigned char* d_gray,
                    int width, int height, cudaStream_t stream) {
+  if (width <= 0 || height <= 0) return;
   dim3 block(32, 8);
   dim3 grid((width + block.x - 1) / block.x, (height + block.y - 1) / block.y);
   grayscale_kernel<<<grid, block, 0, stream>>>(d_bgr, d_gray, width, height);
@@ -67,6 +68,7 @@ void grayscale_gpu(const unsigned char* d_bgr, unsigned char* d_gray,
 
 void grayscale_gpu_vec4(const unsigned char* d_bgr, unsigned char* d_gray,
                         int width, int height, cudaStream_t stream) {
+  if (width <= 0 || height <= 0) return;
   // Word loads/stores need 4-byte alignment; cudaMalloc gives far more, but a
   // caller may pass an offset pointer. Fall back rather than fault.
   const bool aligned = reinterpret_cast<uintptr_t>(d_bgr) % 4 == 0 &&

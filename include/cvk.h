@@ -30,3 +30,8 @@ void grayscale_gpu_vec4(const unsigned char* d_bgr, unsigned char* d_gray,
 // Naive baseline: one thread per pixel, 25 global loads each.
 void gaussian_blur5_naive(const unsigned char* d_src, unsigned char* d_dst,
                           int width, int height, cudaStream_t stream = 0);
+
+// Same result, bit-identical to gaussian_blur5_naive. Shared-memory tiles with halo,
+// separable passes with a 16-bit intermediate.
+void gaussian_blur5_tiled(const unsigned char* d_src, unsigned char* d_dst,
+                          int width, int height, cudaStream_t stream = 0);

@@ -85,6 +85,10 @@ struct Config {
 // so one slow iteration (clock dip, driver hiccup) shows up in p95, not the median.
 template <class Launch>
 Stats time_ms(Launch&& launch, const Config& cfg = {}) {
+  if (cfg.iters <= 0) {
+    std::fprintf(stderr, "time_ms: iters must be positive\n");
+    std::exit(1);
+  }
   for (int i = 0; i < cfg.warmup; ++i) launch();
   CUDA_CHECK(cudaStreamSynchronize(cfg.stream));
 

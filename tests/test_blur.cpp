@@ -21,6 +21,7 @@ struct Variant {
 const std::vector<Variant>& variants() {
   static const std::vector<Variant> v = {
       {"naive", [](auto... a) { gaussian_blur5_naive(a...); }},
+      {"tiled", [](auto... a) { gaussian_blur5_tiled(a...); }},
   };
   return v;
 }
@@ -62,6 +63,9 @@ int main() {
   failures += check(33, 17, "checker");
   failures += check(1921, 1081, "checker");
   failures += check(1920, 1080, "white");
+  // Degenerate sizes must be a no-op, not a failed launch that kills the process.
+  for (const Variant& v : variants()) { v.fn(nullptr, nullptr, 0, 5); v.fn(nullptr, nullptr, 5, -1); }
+  std::printf("ok   degenerate dimensions are no-ops\n");
   std::printf(failures ? "\n%d case(s) FAILED\n" : "\nall cases passed\n", failures);
   return failures ? 1 : 0;
 }

@@ -70,6 +70,9 @@ int main() {
   }
   failures += check(1921, 1081, /*in_offset=*/1);  // exercises the unaligned fallback
   failures += check_all_colors();
+  grayscale_gpu(nullptr, nullptr, 0, 5);       // degenerate sizes must be no-ops
+  grayscale_gpu_vec4(nullptr, nullptr, 5, -1);
+  std::printf("ok   degenerate dimensions are no-ops\n");
   std::printf(failures ? "\n%d case(s) FAILED\n" : "\nall cases passed\n", failures);
   return failures ? 1 : 0;
 }

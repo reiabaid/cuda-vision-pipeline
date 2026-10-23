@@ -12,8 +12,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CUDA_STANDARD 17)
 enable_testing()
 
+option(CVK_BUILD_TESTS "Build correctness tests (need OpenCV)" ON)
+
 find_package(CUDAToolkit REQUIRED)
-find_package(OpenCV REQUIRED COMPONENTS core imgproc)
+if(CVK_BUILD_TESTS)
+  find_package(OpenCV REQUIRED COMPONENTS core imgproc)
+endif()
 
 add_library(cvk
   src/kernels/grayscale.cu
@@ -29,12 +33,11 @@ foreach(name grayscale blur)
   target_link_libraries(bench_${name} PRIVATE cvk)
 endforeach()
 
-add_executable(test_grayscale tests/test_grayscale.cpp)
-target_link_libraries(test_grayscale PRIVATE cvk ${OpenCV_LIBS})
-target_include_directories(test_grayscale PRIVATE tests)
-add_test(NAME grayscale COMMAND test_grayscale)
-
-add_executable(test_blur tests/test_blur.cpp)
-target_include_directories(test_blur PRIVATE tests)
-target_link_libraries(test_blur PRIVATE cvk ${OpenCV_LIBS})
-add_test(NAME blur COMMAND test_blur)
+if(CVK_BUILD_TESTS)
+  foreach(name grayscale blur)
+    add_executable(test_${name} tests/test_${name}.cpp)
+    target_include_directories(test_${name} PRIVATE tests)
+    target_link_libraries(test_${name} PRIVATE cvk ${OpenCV_LIBS})
+    add_test(NAME ${name} COMMAND test_${name})
+  endforeach()
+endif()
