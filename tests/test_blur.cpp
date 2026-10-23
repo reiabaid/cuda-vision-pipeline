@@ -22,6 +22,7 @@ const std::vector<Variant>& variants() {
   static const std::vector<Variant> v = {
       {"naive", [](auto... a) { gaussian_blur5_naive(a...); }},
       {"tiled", [](auto... a) { gaussian_blur5_tiled(a...); }},
+      {"tiled4", [](auto... a) { gaussian_blur5_tiled4(a...); }},
   };
   return v;
 }

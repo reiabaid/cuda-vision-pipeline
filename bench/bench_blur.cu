@@ -5,5 +5,6 @@
 
 int main(int argc, char** argv) {
   return bench::run_sweep(argc, argv, {"blur", 1, 1, 2.0,
-                           {{"naive", gaussian_blur5_naive}, {"tiled", gaussian_blur5_tiled}}});
+                           {{"naive", gaussian_blur5_naive}, {"tiled", gaussian_blur5_tiled},
+                            {"tiled4", gaussian_blur5_tiled4}}});
 }

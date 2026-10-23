@@ -36,6 +36,10 @@ void gaussian_blur5_naive(const unsigned char* d_src, unsigned char* d_dst,
 void gaussian_blur5_tiled(const unsigned char* d_src, unsigned char* d_dst,
                           int width, int height, cudaStream_t stream = 0);
 
+// Same result again, 4 output pixels per thread with word-sized shared/global accesses.
+void gaussian_blur5_tiled4(const unsigned char* d_src, unsigned char* d_dst,
+                           int width, int height, cudaStream_t stream = 0);
+
 // 3x3 Sobel edge magnitude of a single-channel 8-bit image: min(|gx| + |gy|, 255),
 // reflect-101 borders. Bit-exact with cv::Sobel (CV_16S) + saturating |.|+|.|.
 void sobel_magnitude(const unsigned char* d_gray, unsigned char* d_out,

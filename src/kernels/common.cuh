@@ -12,15 +12,15 @@ __device__ __forceinline__ int reflect101(int i, int n) {
   return i;
 }
 
-// Cooperatively loads the BX x BY output tile at (x0, y0) plus an R-pixel halo into
+// Cooperatively loads the BX x BY output tile (any block shape; threads stride by blockDim) at (x0, y0) plus an R-pixel halo into
 // shared memory. Reflection is applied only for blocks whose halo leaves the image.
 template <int BX, int BY, int R>
 __device__ __forceinline__ void load_tile(unsigned char (&tile)[BY + 2 * R][BX + 2 * R],
                                           const unsigned char* __restrict__ src, int width,
                                           int height, int x0, int y0) {
   const bool interior = x0 >= R && y0 >= R && x0 + BX + R <= width && y0 + BY + R <= height;
-  for (int ty = threadIdx.y; ty < BY + 2 * R; ty += BY)
-    for (int tx = threadIdx.x; tx < BX + 2 * R; tx += BX) {
+  for (int ty = threadIdx.y; ty < BY + 2 * R; ty += blockDim.y)
+    for (int tx = threadIdx.x; tx < BX + 2 * R; tx += blockDim.x) {
       int gy = y0 + ty - R, gx = x0 + tx - R;
       if (!interior) {
         gy = reflect101(gy, height);

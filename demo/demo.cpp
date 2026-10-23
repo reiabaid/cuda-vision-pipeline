@@ -79,7 +79,7 @@ int main(int argc, char** argv) {
   CUDA_CHECK(cudaMalloc(&d_edge, px));
   auto gpu_pipeline = [&] {
     grayscale_gpu_vec4(d_bgr, d_gray, W, H);
-    gaussian_blur5_tiled(d_gray, d_blur, W, H);
+    gaussian_blur5_tiled4(d_gray, d_blur, W, H);
     sobel_magnitude(d_blur, d_edge, W, H);
   };
   CUDA_CHECK(cudaMemcpy(d_bgr, bgr.data, px * 3, cudaMemcpyHostToDevice));
