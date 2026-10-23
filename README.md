@@ -90,3 +90,7 @@ activates it for the current shell.
 Multi-output-per-thread blur and Sobel, separable filter variants, multi-channel blur, pitched images,
 a streaming experiment for data larger than VRAM, and a TensorRT integration that feeds the fused
 preprocessing kernel.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
