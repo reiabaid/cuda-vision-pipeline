@@ -35,3 +35,40 @@ void gaussian_blur5_naive(const unsigned char* d_src, unsigned char* d_dst,
 // separable passes with a 16-bit intermediate.
 void gaussian_blur5_tiled(const unsigned char* d_src, unsigned char* d_dst,
                           int width, int height, cudaStream_t stream = 0);
+
+// 3x3 Sobel edge magnitude of a single-channel 8-bit image: min(|gx| + |gy|, 255),
+// reflect-101 borders. Bit-exact with cv::Sobel (CV_16S) + saturating |.|+|.|.
+void sobel_magnitude(const unsigned char* d_gray, unsigned char* d_out,
+                     int width, int height, cudaStream_t stream = 0);
+
+// 256-bin histogram of a single-channel 8-bit image. d_hist holds 256 unsigned ints and is
+// zeroed by the call. Exact. The shared-memory version privatizes bins per block;
+// the naive version does one global atomic per pixel.
+void histogram256(const unsigned char* d_gray, unsigned* d_hist,
+                  int width, int height, cudaStream_t stream = 0);
+void histogram256_naive(const unsigned char* d_gray, unsigned* d_hist,
+                        int width, int height, cudaStream_t stream = 0);
+
+// Bilinear resize of a packed 8-bit BGR image (half-pixel centres, as cv::INTER_LINEAR).
+// Within 1 LSB of OpenCV (OpenCV uses 11-bit fixed-point weights, this uses float).
+void resize_bilinear_bgr(const unsigned char* d_src, int src_w, int src_h,
+                         unsigned char* d_dst, int dst_w, int dst_h, cudaStream_t stream = 0);
+
+// Normalization for ML inputs; channel order is RGB (index 0 = R).
+struct NormParams {
+  float mean[3];
+  float inv_std[3];  // 1 / std
+};
+
+// Fused ML preprocessing: bilinear resize + BGR->RGB + (x/255 - mean) * inv_std +
+// HWC->CHW float32, one kernel, no intermediate image. d_dst holds 3*dst_w*dst_h floats.
+void preprocess_nchw(const unsigned char* d_src, int src_w, int src_h,
+                     float* d_dst, int dst_w, int dst_h,
+                     const NormParams& params, cudaStream_t stream = 0);
+
+// Same result via two kernels and a uint8 intermediate (d_tmp: 3*dst_w*dst_h bytes), kept
+// as the baseline for the fusion benchmark. Differs from the fused path by the intermediate
+// rounding (up to 0.5/255/std per value).
+void preprocess_nchw_unfused(const unsigned char* d_src, int src_w, int src_h,
+                             float* d_dst, int dst_w, int dst_h, const NormParams& params,
+                             unsigned char* d_tmp, cudaStream_t stream = 0);

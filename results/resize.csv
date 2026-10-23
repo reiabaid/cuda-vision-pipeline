@@ -1,0 +1,7 @@
+device,cache,kernel,width,height,bytes,median_ms,min_ms,p95_ms,gbps,pct_peak,speedup
+"NVIDIA GeForce RTX 3050 Ti Laptop GPU",cold,resize/bilinear,256,256,245760,0.006144,0.00512,0.007168,40,20.8299,1
+"NVIDIA GeForce RTX 3050 Ti Laptop GPU",cold,resize/bilinear,512,512,983040,0.009216,0.008192,0.009216,106.667,55.5463,1
+"NVIDIA GeForce RTX 3050 Ti Laptop GPU",cold,resize/bilinear,1024,1024,3932160,0.023552,0.022528,0.0256,166.957,86.942,1
+"NVIDIA GeForce RTX 3050 Ti Laptop GPU",cold,resize/bilinear,1920,1080,7776000,0.044032,0.043008,0.044032,176.599,91.9632,1
+"NVIDIA GeForce RTX 3050 Ti Laptop GPU",cold,resize/bilinear,3840,2160,31104000,0.169984,0.16896,0.171008,182.982,95.2872,1
+"NVIDIA GeForce RTX 3050 Ti Laptop GPU",cold,resize/bilinear,7680,4320,124416000,0.672768,0.671744,0.673792,184.932,96.3024,1

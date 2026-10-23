@@ -8,6 +8,7 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <functional>
 #include <string>
 #include <vector>
 
@@ -19,7 +20,7 @@ struct Size {
   int w, h;
 };
 
-using KernelFn = void (*)(const unsigned char*, unsigned char*, int, int, cudaStream_t);
+using KernelFn = std::function<void(const unsigned char*, unsigned char*, int, int, cudaStream_t)>;
 
 struct Variant {
   const char* name;
@@ -32,12 +33,22 @@ struct Sweep {
   int out_bytes_per_pixel;      // size of the output buffer
   double traffic_bytes_per_pixel;  // ideal DRAM traffic, used for GB/s and % of peak
   std::vector<Variant> variants;
+  bool random_input = false;      // pseudo-random bytes instead of a constant (data-dependent kernels)
 };
 
 inline const std::vector<Size>& default_sizes() {
   static const std::vector<Size> s = {{256, 256},   {512, 512},   {1024, 1024},
                                       {1920, 1080}, {3840, 2160}, {7680, 4320}};
   return s;
+}
+
+// Cheap integer-hash fill; content only matters for data-dependent kernels (histogram).
+__global__ void fill_pseudo_random(unsigned char* p, size_t n) {
+  const size_t i = static_cast<size_t>(blockIdx.x) * blockDim.x + threadIdx.x;
+  if (i >= n) return;
+  unsigned x = static_cast<unsigned>(i) * 2654435761u;
+  x ^= x >> 15; x *= 2246822519u; x ^= x >> 13;
+  p[i] = static_cast<unsigned char>(x);
 }
 
 inline int run_sweep(int argc, char** argv, const Sweep& sweep) {
@@ -71,8 +82,10 @@ inline int run_sweep(int argc, char** argv, const Sweep& sweep) {
     unsigned char *d_in = nullptr, *d_out = nullptr;
     CUDA_CHECK(cudaMalloc(&d_in, pixels * sweep.in_bytes_per_pixel));
     CUDA_CHECK(cudaMalloc(&d_out, pixels * sweep.out_bytes_per_pixel));
-    // Pixel values do not affect these kernels' speed; just avoid reading uninitialized memory.
-    CUDA_CHECK(cudaMemset(d_in, 0x7f, pixels * sweep.in_bytes_per_pixel));
+    // Constant data by default: most kernels here are data-independent.
+    const size_t in_bytes = pixels * sweep.in_bytes_per_pixel;
+    if (sweep.random_input) fill_pseudo_random<<<static_cast<unsigned>((in_bytes + 255) / 256), 256>>>(d_in, in_bytes);
+    else CUDA_CHECK(cudaMemset(d_in, 0x7f, in_bytes));
 
     const double bytes = static_cast<double>(pixels) * sweep.traffic_bytes_per_pixel;
     double baseline_ms = 0.0;
