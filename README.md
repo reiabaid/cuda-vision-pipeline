@@ -13,12 +13,16 @@ for *why* it is as fast as it is.
 | Histogram, shared-memory privatization | **36x** faster than global atomics (random data), 93% of peak at 8K | exact vs `cv::calcHist` |
 | Fused ML preprocessing (resize + BGR->RGB + normalize + HWC->CHW) | **95.9% of peak**, 1.30x over the 2-kernel version | within 1e-3 of a CPU float reference |
 | Bilinear resize (2x down) | 92-96% of peak | max 1 LSB vs `cv::resize` |
-| Gaussian blur 5x5, shared-memory tiles | 1.8-2.0x over naive, **17% of ideal bandwidth** (instruction-bound, see below) | bit-exact vs `cv::GaussianBlur` |
-| Sobel 3x3, shared-memory tiles | 21.5% of ideal bandwidth | bit-exact vs `cv::Sobel` |
+| Gaussian blur 5x5, shared-memory tiles, 4 outputs/thread | **5.5-6.7x** over naive, **~51% of ideal bandwidth** (2.7-3x over a 1-output-per-thread tiled kernel) | bit-exact vs `cv::GaussianBlur` |
+| Sobel 3x3, shared-memory tiles | 21.5% of ideal bandwidth (1 output/thread; the blur's 4-output technique is the next lever) | bit-exact vs `cv::Sobel` |
 
-End-to-end demo (`cvk_demo`: grayscale -> blur -> Sobel on a 1920x1080 image, verified bit-exact against OpenCV):
-GPU kernels 0.33 ms vs 4.7 ms for 16-thread OpenCV on CPU (**14x**); including PCIe upload/download
-the GPU pipeline is 1.8 ms (**2.6x**), because copies dominate once the kernels are this fast.
+End-to-end demo (`cvk_demo`: grayscale -> blur -> Sobel on a 1920x1080 image, every stage verified bit-exact against OpenCV):
+GPU kernels take 0.23 ms vs 4.7-6.2 ms for 16-thread OpenCV on the CPU (**~20-28x**). Including PCIe upload and
+download the GPU pipeline takes 1.8 ms (**2.6-3.5x**), because copies dominate once the kernels are this fast.
+
+![Percent of ideal bandwidth per kernel](docs/img/pct_peak.png)
+
+![Demo pipeline output](docs/img/demo.png)
 
 ## What is in here
 
@@ -53,10 +57,11 @@ the GPU pipeline is 1.8 ms (**2.6x**), because copies dominate once the kernels 
   intermediate uint8 rounding).
 - **Histogram:** privatizing bins in shared memory removes the contention of one global atomic per pixel.
   All-equal pixels (worst case for global atomics) widen the gap to ~60-98x; random data gives 36-48x.
-- **Blur and Sobel are *not* memory-bound.** The tiled blur has DRAM at 15% busy but issue slots 58% busy and
-  ~18.6 cycles between instructions. Removing integer division and border logic did not help (measured), so
-  the remaining lever is more work per thread (several outputs per thread with word-sized shared/global
-  accesses); this is the main open performance item.
+- **Blur was instruction-bound, not memory-bound.** The first tiled kernel (1 output/thread) had DRAM only 15%
+  busy but issue slots 58% busy and ~18.6 cycles between instructions. Removing integer division and per-element
+  border logic did not help (measured, so the hypothesis was wrong), but processing 4 outputs per thread with
+  word-sized shared-memory and global accesses (same arithmetic, still bit-exact) took it from 17% to ~51% of
+  ideal bandwidth. Sobel still uses 1 output/thread; applying the same change is the clearest next gain.
 
 ## Build and run
 
@@ -87,7 +92,7 @@ activates it for the current shell.
 
 ## Roadmap
 
-Multi-output-per-thread blur and Sobel, separable filter variants, multi-channel blur, pitched images,
+4-outputs-per-thread Sobel, profiling the new blur kernel to see what limits it now, multi-channel blur, pitched images,
 a streaming experiment for data larger than VRAM, and a TensorRT integration that feeds the fused
 preprocessing kernel.
 
